@@ -3,150 +3,102 @@ import commune as c
 import json
 import os
 from typing import List, Dict, Union, Optional, Any
+import importlib
+import inspect
 
 print = c.print
-class Select:
+
+class Toolbox:
     """
-    Advanced search and relevance ranking module powered by LLMs.
+    A toolbox that provides access to various tools and can intelligently select
+    the most appropriate tool based on a query.
     
-    This module helps find the most relevant items from a list of options based on a query,
-    using LLM-based semantic understanding to rank and filter options.
+    This module helps organize and access tools within the dev.tool namespace,
+    with the ability to automatically select the most relevant tool for a given task.
     """
-
-    def __init__(self, provider='dev.model.openrouter'):
+    def __init__(model='dev.model.openrouter'):
+        self.model = c.module(model)
+    def tools(self) -> List[str]:
         """
-        Initialize the Find module.
+        List all available tools in the dev.tool namespace.
         
-        Args:
-            model: Pre-initialized model instance (optional)
-            default_provider: Provider to use if no model is provided
-            default_model: Default model to use for ranking
-        """
-        self.model = c.module(provider)()
-
-    def forward(self,  
-              options: Union[List[str], Dict[Any, str]] = [],  
-              query: str = 'most relevant', 
-              n: int = 10,  
-              trials: int = 3,
-              min_score: int = 0,
-              max_score: int = 10,
-              threshold: int = 5,
-              model: str = None,
-              context: Optional[str] = None,
-              temperature: float = 0.5,
-              verbose: bool = True) -> List[str]:
-        """
-        Find the most relevant options based on a query.
-        
-        Args:
-            options: List of options or dictionary of options
-            query: Search query to match against options
-            n: Maximum number of results to return
-            trials: Number of retry attempts if an error occurs
-            min_score: Minimum possible score
-            max_score: Maximum possible score
-            threshold: Minimum score required to include in results
-            model: Model to use for ranking
-            context: Additional context to help with ranking
-            temperature: Temperature for generation (lower = more deterministic)
-            verbose: Whether to print output during generation
-            
         Returns:
-            List of the most relevant options
+            List[str]: List of tool names.
         """
-
-        anchors = ["<START_JSON>", "</END_JSON>"]
-        
-        # Convert dict to list if needed
-        if isinstance(options, dict):
-            idx2options = {i: option for i, option in enumerate(options.keys())}
-        else:
-            idx2options = {i: option for i, option in enumerate(options)}
-            
-        if not idx2options:
-            return []
-            
-        # Format context if provided
-        context_str = f"\nCONTEXT:\n{context}" if context else ""
-        
-        # Build the prompt
-        prompt = f'''
-        
-        --TASK--
-        - {query}
-        - {context_str}
-        - Evaluate each option based on its relevance to the query
-        - Return at most {n} options with their scores
-        - Score range: {min_score} (lowest) to {max_score} (highest)
-        - Only include options with scores >= {threshold}
-        - Be conservative with scoring to prioritize quality over quantity
-        - Respond ONLY with the JSON format specified below
-
-        --OPTIONS--
-        {idx2options} 
-        
-        --OUTPUT_FORMAT--
-        {anchors[0]}(data:(idx:INT, score:INT)]){anchors[1]}
-        
-        --OUTPUT--
-        '''
-        
-        # Generate the response
-        output = ''
-
-        response = self.model.forward( 
-            prompt, 
-            model=model, 
-            stream=True,
-            temperature=temperature
-        )
+        tools =  c.mods(search='dev.tool')
+        # ignore the toolbox 
+        tools = [tool for tool in tools if  'toolbox' not in tool]
+        return tools
 
 
-        # PROCEESS THE REPSONSE 
-        for ch in response: 
-            if verbose:
-                print(ch, end='')
-            output += ch
-            if anchors[1] in output:
-                break
-                
-        # Extract and parse the JSON
-        try:
-            if anchors[0] in output:
-                json_str = output.split(anchors[0])[1].split(anchors[1])[0]
-            else:
-                json_str = output
-                
-            if verbose:
-                print("\nParsing response...", color="cyan")
-                
-            result = json.loads(json_str)
-            
-            # Validate the response structure
-            if not isinstance(result, dict) or "data" not in result:
-                if verbose:
-                    print("Invalid response format, missing 'data' field", color="red")
-                result = {"data": []}
-                
-            # Filter and convert to final output format
-            filtered_options = []
-            for item in result["data"]:
-                if isinstance(item, dict) and "idx" in item and "score" in item:
-                    idx, score = item["idx"], item["score"]
-                    if score >= threshold and idx in idx2options:
-                        filtered_options.append(idx2options[idx])
-                        
-            if verbose:
-                print(f"Found {len(filtered_options)} relevant options", color="green")
-                
-            return filtered_options
-            
-        except json.JSONDecodeError as e:
-            if verbose:
-                print(f"JSON parsing error: {e}", color="red")
-                print(f"Raw output: {output}", color="red")
-            if trials > 0:
-                print(f"Retrying... ({trials} attempts left)", color="yellow")
-                return self.select(options, query, n, trials - 1, min_score, max_score, threshold, model, context, temperature, verbose)
-            raise ValueError(f"Failed to parse LLM response as JSON: {e}")
+    def tool2code(self) -> str:
+        tool2schema = {
+            tool: c.schema(tool)
+            for tool in self.tools()
+        }
+    
+    def tool2schema(self) -> Dict[str, str]:
+        """
+        Map each tool to its schema.
+        
+        Returns:
+            Dict[str, str]: Dictionary mapping tool names to their schemas.
+        """
+        tool2schema = {tool: c.schema(tool) for tool in self.tools()}
+        return tool2schema
+
+
+    def forward(
+        self, 
+        query: str = 'i want to edit a file', 
+        *extra_query,
+        tools: Optional[List[str]] = None, 
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Forward the query to the appropriate tool based on the provided query.
+        
+        Args:
+            query (str): The query to be processed.
+            tools (List[str], optional): List of specific tools to consider. If None, all tools are considered.
+            **kwargs: Additional arguments to pass to the selected tool.
+        
+        Returns:
+            Dict[str, Any]: The result from the selected tool.
+        """
+        
+        # Forward the query to the selected tool
+        query = " ".join([query] + list(extra_query))
+
+        selector = c.mod('dev.tool.select')()
+        module =  selector.forward(query=query, options=self.tool2schema(), n=1, **kwargs)[0]['name']
+
+        # now find the fn 
+
+        schema = c.schema(module)
+        # get the function name from the module
+        fn_name = selector.forward(query=query, options=schema, n=1, **kwargs)[0]['name']
+
+
+
+        fn_schema = c.schema(getattr(module, fn_name))
+        # get the function signature
+        sig = str(inspect.signature(getattr(module, fn_name))) 
+        # get the parameters
+
+        prompt = str({
+            "query": query,
+            "schema": fn_schema,
+            "signature": sig,
+            'task': 'output a params dictionary for the function based on the query',
+            'format': f"<{fn_name}(params)>\nPARAMS DICT\n</{fn_name}(params)> # end of params",
+        })'
+        
+        output =  self.model.forward(prompt, **kwargs)
+
+        # parse the output
+        output = json.loads(output.split(f"<{fn_name}(params)>")[1].split(f"</{fn_name}(params)>")[0])
+
+        
+
+

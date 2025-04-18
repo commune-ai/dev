@@ -51,8 +51,18 @@ class Dev:
         """
         self.model = c.module(model)(**kwargs)
         self.cache_dir = abspath(cache_dir)
-        self.memory = c.module('dev.tool.select')()
+        self.memory = c.module('dev.memory')()
         ensure_directory_exists(self.cache_dir)
+
+
+    def set_memory(self, memory):
+        """
+        Set the memory module for the Dev instance.
+        
+        Args:
+            memory: Memory module to use
+        """
+        self.memory = memory
         
     def forward(self, 
                 text: str = '', 
@@ -62,9 +72,13 @@ class Dev:
                 temperature: float = 0.5, 
                 max_tokens: int = 1000000, 
                 model: Optional[str] = 'anthropic/claude-3.7-sonnet',
+                auto_save: bool = False,
+                stream: bool = True,
                 verbose: bool = True,
                 context_files: Optional[List[str]] = None,
                 ignore_patterns: List[str] = ['.git', '__pycache__', '*.pyc', '.DS_Store', '.env', 'node_modules', 'venv'],
+                include_file_content: bool = True,
+                use_cache: bool = True,
                 module=None, 
                 mod = None,
                 mode: str = 'auto', 
@@ -76,6 +90,7 @@ class Dev:
             text: The main prompt text
             *extra_text: Additional text to append to the prompt
             to: to directory for code generation/editing
+            t: Alternative to directory (overrides to if provided)
             temperature: Temperature for generation (higher = more creative)
             max_tokens: Maximum tokens to generate
             model: Model to use (defaults to self.default_model)
@@ -84,6 +99,8 @@ class Dev:
             verbose: Whether to print detailed information
             context_files: Specific files to include in context (if None, includes all)
             ignore_patterns: File patterns to ignore when gathering context
+            include_file_content: Whether to include file content in context (vs. just file list)
+            use_cache: Whether to use cached responses
             mode: Operation mode ('auto', 'edit', 'create')
             
         Returns:
@@ -101,11 +118,12 @@ class Dev:
         files = self.memory.forward(files, query=text)
         context = str({f: get_text(f) for f in files})
         prompt = str({
+            'query': text,
             "task": self.task,
-            "format": f"<{self.anchor}(path/to/file)>\nFILE CONTENT\n</{self.anchor}(path/to/file)> # end of file",
-            "output": f"assume the path is {to} only output relative path to this file",
             "context": str(context),
-        }) + text
+            "output_sformat": [f"<{self.anchor}(path/to/file)>\nFILE CONTENT\n</{self.anchor}(path/to/file)> # end of file",
+                    f"assume the path is {to} only output relative path to this file"],
+        }) 
 
         if verbose:
             print(f"🧠 Generating code with model: {model or self.default_model}", color="cyan")
@@ -114,11 +132,13 @@ class Dev:
         # Generate the response
         output = self.model.forward(
             prompt, 
-            stream=True, 
+            stream=stream, 
             model=model, 
             max_tokens=max_tokens, 
-            temperature=temperature 
+            temperature=temperature
+            
         )
+        
         # Process the output
         path2text = self._process_output(output, to, verbose)
         n_files = len(path2text)
@@ -136,8 +156,9 @@ class Dev:
         else:
             if verbose:
                 print("No files generated.", color="red")
+        
         return path2text
-
+    
     def _process_output(self, output, to, verbose=True) -> Dict[str, str]:
         """
         Process the streaming output from the model.
@@ -220,3 +241,19 @@ class Dev:
                 fn['result'] = result
                 text =' '.join([*words[:fn['idx']],'-->', str(result), *words[fn['idx']:]])
             return text
+        
+
+
+    def test(self, text='write a function that adds two numbers and a test.js file that i can test it all in one class and have me test it in test.js and a script to run it'):
+        """
+        Test the Dev module by generating code based on a prompt.
+        
+        Args:
+            text: The prompt text
+            
+        Returns:
+            Dictionary mapping file paths to generated content
+        """
+        path = '~/.dev/test/add'
+        return self.forward(text, to=path, verbose=True)
+

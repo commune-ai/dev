@@ -1,43 +1,67 @@
 
-# Key Management Module
+# Development Environment
 
-This module provides cryptographic key management functionality for various blockchain systems.
+This repository contains a development environment with support for:
+- Python
+- Node.js
+- Rust
+- Docker-in-Docker
 
-## Features
+## Getting Started
 
-- Support for multiple cryptographic types (sr25519, ed25519, ecdsa)
-- Key generation, storage, and retrieval
-- Signing and verification of messages
-- JWT token generation and verification
-- Mnemonic phrase support
-- Secure key storage
+### Using Docker Compose
 
-## Usage
-
-```python
-from val.key import Key
-
-# Create a new key
-key = Key()
-
-# Sign a message
-signature = key.sign("Hello, world!")
-
-# Verify a signature
-is_valid = key.verify("Hello, world!", signature, key.public_key)
-
-# Generate a JWT token
-token = key.get_token({"user_id": 123})
-
-# Verify a JWT token
-token_data = key.verify_token(token)
+1. Start the container:
+```bash
+./scripts/docker-compose-up.sh
 ```
 
-## Utils
+2. Enter the container:
+```bash
+make enter
+```
 
-The module includes a utility library for common cryptographic operations:
+3. Stop the container:
+```bash
+./scripts/docker-compose-down.sh
+```
 
-- BIP39 mnemonic handling
-- ECDSA key operations
-- String/bytes conversion utilities
-- File system operations for key storage
+### Using Make Commands
+
+1. Build the container:
+```bash
+make build
+```
+
+2. Start the container:
+```bash
+make start
+# or
+make up
+```
+
+3. Enter the container:
+```bash
+make enter
+```
+
+4. Stop the container:
+```bash
+make stop
+# or
+make down
+```
+
+## Permissions
+
+If you encounter permission issues with the scripts, run:
+```bash
+make chmod
+```
+
+## Testing
+
+Run tests with:
+```bash
+make test
+```
