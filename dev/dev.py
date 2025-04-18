@@ -53,16 +53,6 @@ class Dev:
         self.cache_dir = abspath(cache_dir)
         self.memory = c.module('dev.memory')()
         ensure_directory_exists(self.cache_dir)
-
-
-    def set_memory(self, memory):
-        """
-        Set the memory module for the Dev instance.
-        
-        Args:
-            memory: Memory module to use
-        """
-        self.memory = memory
         
     def forward(self, 
                 text: str = '', 
@@ -130,34 +120,9 @@ class Dev:
             print(f"📁 to directory: {to}", color="cyan")
             print(f"🍆 Size (request in characters): {len(context)} files", color="cyan")
         # Generate the response
-        output = self.model.forward(
-            prompt, 
-            stream=stream, 
-            model=model, 
-            max_tokens=max_tokens, 
-            temperature=temperature
-            
-        )
-        
+        output = self.model.forward(prompt, stream=stream, model=model, max_tokens=max_tokens, temperature=temperature )
         # Process the output
-        path2text = self._process_output(output, to, verbose)
-        n_files = len(path2text)
-        if n_files  > 0:
-            if verbose:
-                print('Files to write:')
-                for path in path2text.keys():
-                    print(f' - {path}')
-                
-            if input(f'Would you like to save {len(path2text)} files to {to}? [y/n] ').lower() == 'y':
-                for path, content in path2text.items():
-                    put_text(path, content)
-                    if verbose:
-                        print(f'✅ Saved file: {path}', color="green")
-        else:
-            if verbose:
-                print("No files generated.", color="red")
-        
-        return path2text
+        return self._process_output(output, to, verbose)
     
     def _process_output(self, output, to, verbose=True) -> Dict[str, str]:
         """
@@ -211,6 +176,24 @@ class Dev:
                 except Exception as e:
                     if verbose:
                         print(f"Error processing output: {e}", color="red")
+            
+        
+
+        n_files = len(path2text)
+        if n_files  > 0:
+            if verbose:
+                print('Files to write:')
+                for path in path2text.keys():
+                    print(f' - {path}')
+                
+            if input(f'Would you like to save {len(path2text)} files to {to}? [y/n] ').lower() == 'y':
+                for path, content in path2text.items():
+                    put_text(path, content)
+                    if verbose:
+                        print(f'✅ Saved file: {path}', color="green")
+        else:
+            if verbose:
+                print("No files generated.", color="red")
         
         return path2text
 
@@ -241,8 +224,6 @@ class Dev:
                 fn['result'] = result
                 text =' '.join([*words[:fn['idx']],'-->', str(result), *words[fn['idx']:]])
             return text
-        
-
 
     def test(self, text='write a function that adds two numbers and a test.js file that i can test it all in one class and have me test it in test.js and a script to run it'):
         """

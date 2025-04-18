@@ -16,8 +16,8 @@ class Toolbox:
     This module helps organize and access tools within the dev.tool namespace,
     with the ability to automatically select the most relevant tool for a given task.
     """
-    def __init__(model='dev.model.openrouter'):
-        self.model = c.module(model)
+    def __init__(self, model='dev.model.openrouter'):
+        self.model = c.module(model)()
     def tools(self) -> List[str]:
         """
         List all available tools in the dev.tool namespace.
@@ -78,26 +78,22 @@ class Toolbox:
         schema = c.schema(module)
         # get the function name from the module
         fn_name = selector.forward(query=query, options=schema, n=1, **kwargs)[0]['name']
-
-
-
-        fn_schema = c.schema(getattr(module, fn_name))
         # get the function signature
-        sig = str(inspect.signature(getattr(module, fn_name))) 
         # get the parameters
 
         prompt = str({
             "query": query,
-            "schema": fn_schema,
-            "signature": sig,
+            'fn_name': fn_name,
+            "schema": schema[fn_name],
             'task': 'output a params dictionary for the function based on the query',
             'format': f"<{fn_name}(params)>\nPARAMS DICT\n</{fn_name}(params)> # end of params",
-        })'
+        })
         
         output =  self.model.forward(prompt, **kwargs)
 
-        # parse the output
-        output = json.loads(output.split(f"<{fn_name}(params)>")[1].split(f"</{fn_name}(params)>")[0])
+
+
+        return output
 
         
 

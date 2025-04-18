@@ -3,7 +3,6 @@ import commune as c
 import json
 import os
 from typing import List, Dict, Union, Optional, Any
-import keyboard
 
 print = c.print
 class Select:
