@@ -88,11 +88,12 @@ class Tool:
         Returns:
             Dict[str, str]: Dictionary mapping tool names to their schemas.
         """
-        
-        return {
-            tool: self.schema(tool)
-            for tool in self.tools()
-        }
+        tool2schema = {}
+        for tool in self.tools():
+            tool2schema[tool] = self.schema(tool)
+            tool2schema[tool].pop('name', None)
+            tool2schema[tool].pop('format', None)
+        return tool2schema
     
     def schema(self, tool: str,) -> Dict[str, str]:
         """

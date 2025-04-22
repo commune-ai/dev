@@ -13,6 +13,9 @@ print = c.print
 
 class Dev:
 
+    start_anchor = '<START_JSON>'
+    end_anchor = '</END_JSON>'
+
     prompt= """
                 --GOAL--
                 YOU ARE A CODER, YOU ARE MR.ROBOT, YOU ARE TRYING TO BUILD IN A SIMPLE
@@ -26,17 +29,18 @@ class Dev:
                 "YOU CAN RESPOND WITH THE FOLLOWING FORMAT THAT MUST BE WITHIN THE PWD"
 
                 --CONTEXT--
-                PWD={pwd}
+                PATH/PWD={path}
                 CONTEXT={context}
                 QUERY={query} # THE QUERY YOU ARE TRYING TO ANSWER
 
                 --TOOLS--
-                THE TOOLS ARE ORGANIZED AS <FN::fn_name><parm_name_1>param_value_1</parm_name_1></FN::fn_name>
-                YOU CAN USE THE FOLLOWING TOOLS ONLY USE THESE TOOLS
-                TOOLS={tools} # YOU MUST CREATE A PLAN OF TOOLS THT WE WILL PARSE ACCORDINGLY TO REPRESENT YOUR PERSPECTIVE 
-
-
-
+                YOU ARE ASSUMING EACH TOOL HAS THEIR OWN FORWARD FUNCTION THAT DEFINES THEIR CABAPILITIES AND SO YOU SELECT THE TOOL
+                AND INSERT THE PARAMS TO CALL THE TOOL FORWARD FUNCTION, PLEASE SPECIFY THE TOOLNAME AND THE PARAMS
+                {tools}
+                --OUTPUT_TOOL_PLAN_FORMAT--
+                 YOU MUST CREATE A PLAN OF TOOLS THT WE WILL PARSE ACCORDINGLY TO REPRESENT YOUR PERSPECTIVE 
+                PROVIDE A PLAN OF TOOLS AND THEIR PARAMS 
+                {start_anchor}list[dict(fn:str, params:dict)]{end_anchor}
 
                 """
 
@@ -48,44 +52,30 @@ class Dev:
         self.model = c.module(model)(**kwargs)
         self.cache_dir = abspath(cache_dir)
         self.memory = c.module('dev.tool.select_files')()
-        self.tools = c.module('dev.tool')().tool2schema()
-
+        self.tools = self.ta = c.module('dev.tool')().tool2schema()
         ensure_directory_exists(self.cache_dir)
-
-
-
         
     def forward(self, 
                 text: str = '', 
                 *extra_text, 
-                to: str = './', 
-                ctx=None,
+                path: str = './', 
                 temperature: float = 0.5, 
                 max_tokens: int = 1000000, 
                 model: Optional[str] = 'anthropic/claude-3.7-sonnet',
-                auto_save: bool = False,
                 stream: bool = True,
                 verbose: bool = True,
-                context_files: Optional[List[str]] = None,
-                ignore_patterns: List[str] = ['.git', '__pycache__', '*.pyc', '.DS_Store', '.env', 'node_modules', 'venv'],
-                include_file_content: bool = True,
-                use_cache: bool = True,
-                module=None, 
-                mod = None,
                 mode: str = 'auto', 
                 max_age= 10000,
                 **kwargs) -> Dict[str, str]:
-        module = mod or module
-        if module != None:
-            to = c.dirpath(module)
-        to = abspath(to)
-        files = c.files(to)
-
+        context = {f: get_text(f) for f in self.memory.forward(options= c.files( abspath(path)), query=text)}
+        query = self.preprocess(' '.join(list(map(str, [text] + list(extra_text)))))
         prompt =self.prompt.format(
-            pwd=to,
-            context=str({f: get_text(f) for f in self.memory.forward(options=files, query=text)}),
-            query=self.preprocess(' '.join(list(map(str, [text] + list(extra_text))))),
-            tools=self.tools
+            path=path,
+            context=context,
+            query=query,
+            tools=self.tools,
+            start_anchor=self.start_anchor,
+            end_anchor=self.end_anchor
         )
 
         # Generate the response
@@ -102,7 +92,7 @@ class Dev:
             fns = []
             for i, word in enumerate(words):
                 prev_word = words[i-1] if i > 0 else ''
-                # restrictions can currently only handle one function argument, future support for multiple
+                # restrictions can currently only handle one fn argument, future support for multiple
                 magic_prefix = f'@/'
                 if word.startswith(magic_prefix) and not fn_detected:
                     word = word[len(magic_prefix):]
@@ -116,13 +106,13 @@ class Dev:
                         fn_detected = False
             c.print(fns)
             for fn in fns:
-                print('Running function:', fn)
+                print('Running fn:', fn)
                 result = c.fn(fn['fn'])(*fn['params'])
                 fn['result'] = result
                 text =' '.join([*words[:fn['idx']],'-->', str(result), *words[fn['idx']:]])
             return text
 
-    def test(self, text='write a function that adds two numbers and a test.js file that i can test it all in one class and have me test it in test.js and a script to run it'):
+    def test(self, text='write a fn that adds two numbers and a test.js file that i can test it all in one class and have me test it in test.js and a script to run it'):
         """
         Test the Dev module by generating code based on a prompt.
         
@@ -137,9 +127,9 @@ class Dev:
 
     def postprocess(self, output):
         """
-        Postprocess tool outputs and extract function calls.
+        Postprocess tool outputs and extract fn calls.
         
-        This function parses the raw output text and identifies function calls in the format:
+        This fn parses the raw output text and identifies fn calls in the format:
         <FN::function_name>param1</FN::function_name> or 
         <FN::function_name><param_name>param_value</param_name></FN::function_name>
         
@@ -147,7 +137,7 @@ class Dev:
             output (str): The raw output from the model
                 
         Returns:
-            str: The processed output with extracted function calls
+            str: The processed output with extracted fn calls
         """
         import re
         
@@ -156,48 +146,23 @@ class Dev:
         for ch in output: 
             print(ch, end='')
             text += ch
-        
-        # Extract function calls using regex
-        function_pattern = r'<FN::([^/]+)>(.*?)</FN::\1>'
-        param_pattern = r'<([^>]+)>(.*?)</\1>'
-        
-        # Find all function calls
-        function_calls = []
-        for match in re.finditer(function_pattern, text, re.DOTALL):
-            fn_name = match.group(1)
-            fn_content = match.group(2)
-            
-            # Parse parameters
-            params = {}
-            if '<' in fn_content and '>' in fn_content:
-                # Complex format with named parameters
-                for param_match in re.finditer(param_pattern, fn_content, re.DOTALL):
-                    param_name = param_match.group(1)
-                    param_value = param_match.group(2)
-                    params[param_name.lower()] = param_value.strip()
-            else:
-                # Simple format with direct parameter
-                params["value"] = fn_content.strip()
-            
-            function_calls.append({
-                "function": fn_name.lower(),
-                "parameters": params
-            })
-        
-        # You can process the function calls here or return them for further processing
+        json_str = text.split(self.start_anchor)[1].split(self.end_anchor)[0]
+         
+        calls = json.loads(json_str)
+        # You can process the fn calls here or return them for further processing
         print("Function calls detected:")
-        for call in function_calls:
-            print(f"Function: {call['function']}, Parameters: {call['parameters']}")
+        for call in calls:
+            print(f"Function: {call['fn']}, Parameters: {call['params']}")
         # For debugging, you can add:
-        if input('Do you want to see the function calls? (y/n): ').strip().lower() == 'y':
+        if input('Do you want to see the fn calls? (y/n): ').strip().lower() == 'y':
             print("Function calls detected:")
-            for call in function_calls:
-                print(f"Function: {call['function']}, Parameters: {call['parameters']}")
-                fn = c.module(call['function'])()
-                fn.forward(**call['parameters'])
+            for call in calls:
+                print(f"Function: {call['fn']}, Parameters: {call['params']}")
+                fn = c.module(call['fn'])()
+                fn.forward(**call['params'])
                 
 
             
         return {
-            "calls": function_calls
+            "calls": calls
         }
