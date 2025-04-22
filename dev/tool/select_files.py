@@ -25,8 +25,8 @@ class Select:
         self.model = c.module(provider)()
 
     def forward(self,  
-              options: Union[List[str], Dict[Any, str]] = [],  
               query: str = 'most relevant', 
+              options: Union[List[str], Dict[Any, str]] = {},  
               n: int = 10,  
               trials: int = 3,
               min_score: int = 0,
@@ -35,6 +35,7 @@ class Select:
               model: str = None,
               context: Optional[str] = None,
               temperature: float = 0.5,
+              allow_selection: bool = False,
               verbose: bool = True) -> List[str]:
         """
         Find the most relevant options based on a query.
@@ -50,17 +51,19 @@ class Select:
             model: Model to use for ranking
             context: Additional context to help with ranking
             temperature: Temperature for generation (lower = more deterministic)
+            allow_selection: Whether to allow user to select files by index
             verbose: Whether to print output during generation
             
         Returns:
             List of the most relevant options
         """
+        
 
         anchors = ["<START_JSON>", "</END_JSON>"]
         
         # Convert dict to list if needed
         if isinstance(options, dict):
-            idx2options = {i: option for i, option in enumerate(options.keys())}
+            idx2options = {i: {'name': k, 'data': options[k]} for i, k in enumerate(options.keys())}
         else:
             idx2options = {i: option for i, option in enumerate(options)}
             
@@ -71,14 +74,13 @@ class Select:
         context_str = f"\nCONTEXT:\n{context}" if context else ""
         
         # Build the prompt
+
         prompt = f'''
         --QUERY--
         {query}
         {context_str}
-        
         --OPTIONS--
         {idx2options} 
-        
         --RULES--
         - Evaluate each option based on its relevance to the query
         - Return at most {n} options with their scores
@@ -86,11 +88,8 @@ class Select:
         - Only include options with scores >= {threshold}
         - Be conservative with scoring to prioritize quality over quantity
         - Respond ONLY with the JSON format specified below
-        
         --OUTPUT_FORMAT--
         {anchors[0]}(data:(idx:INT, score:INT)]){anchors[1]}
-        
-        --OUTPUT--
         '''
         
         # Generate the response
@@ -133,12 +132,17 @@ class Select:
                 if isinstance(item, dict) and "idx" in item and "score" in item:
                     idx, score = item["idx"], item["score"]
                     if score >= threshold and idx in idx2options:
-                        filtered_options.append(idx2options[idx])
+                        filtered_options.append((idx, idx2options[idx]))
                         
             if verbose:
                 print(f"Found {len(filtered_options)} relevant options", color="green")
-                
-            return filtered_options
+            
+            # Allow user to select files by index if requested
+            if allow_selection and filtered_options:
+                selected_options = self.select_by_index(filtered_options, verbose)
+                return [option[1] for option in selected_options]
+            
+            return [option[1] for option in filtered_options]
             
         except json.JSONDecodeError as e:
             if verbose:
@@ -146,5 +150,55 @@ class Select:
                 print(f"Raw output: {output}", color="red")
             if trials > 0:
                 print(f"Retrying... ({trials} attempts left)", color="yellow")
-                return self.select(options, query, n, trials - 1, min_score, max_score, threshold, model, context, temperature, verbose)
+                return self.forward(options, query, n, trials - 1, min_score, max_score, threshold, model, context, temperature, allow_selection, verbose)
             raise ValueError(f"Failed to parse LLM response as JSON: {e}")
+    
+    def select_by_index(self, options, verbose=True):
+        """
+        Allow user to select files by index from a list of options.
+        
+        Args:
+            options: List of tuples containing (idx, option)
+            verbose: Whether to print output during selection
+            
+        Returns:
+            List of selected options
+        """
+        if verbose:
+            print("\nSelect files by index (comma-separated, e.g. '0,2,3')", color="yellow")
+            print("Press Enter to accept all files, or Ctrl+C to cancel", color="yellow")
+            
+        # Display options with indices
+        for i, (idx, option) in enumerate(options):
+            print(f"[{i}] {option}", color="cyan")
+        
+        try:
+            # Get user input
+            selection = input("\nEnter indices of files to select: ")
+            
+            # If empty, select all
+            if not selection.strip():
+                if verbose:
+                    print("Selecting all files", color="green")
+                return options
+            
+            # Parse selection
+            selected_indices = [int(idx.strip()) for idx in selection.split(',') if idx.strip().isdigit()]
+            selected_options = [options[idx] for idx in selected_indices if 0 <= idx < len(options)]
+            
+            if verbose:
+                print(f"Selected {len(selected_options)} files", color="green")
+            
+            return selected_options
+            
+        except (KeyboardInterrupt, EOFError):
+            # Handle keyboard interrupt (Ctrl+C) or EOF
+            if verbose:
+                print("\nSelection cancelled, defaulting to all files", color="yellow")
+            return options
+        except Exception as e:
+            # Handle any other errors
+            if verbose:
+                print(f"\nError during selection: {e}", color="red")
+                print("Defaulting to all files", color="yellow")
+            return options

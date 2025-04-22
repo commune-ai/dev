@@ -26,20 +26,24 @@ class Summarize:
         self.model = c.module(provider)()
         self.anchors = ["<START_JSON>", "</END_JSON>"]
 
-
-    def file(self,  
-              path: str = './', # Path to the file containing options or a file  
+    def forward(self,  
+              path: str = __file__, # Path to the file containing options or a file  
               query: str = 'most relevant', 
               model: str = None,
               temperature: float = 0.5,
               task = None,
               verbose: bool = True) -> List[str]:
-
+        anchors = self.anchors
         # Format context if provided
         assert os.path.exists(path), f"File not found: {path}"
         assert os.path.isfile(path), f"Path is not a file: {path}"
         content = c.text(path)
+
+        # hash
+        cache_path = 'reuslts/' + c.hash(path)
+
         # Build the prompt
+
         prompt = f'''
         TASK
         - summarize the follwoing based on the format based on the wquery 
@@ -64,17 +68,12 @@ class Summarize:
             if verbose:
                 print(ch, end='')
             output += ch
-            if anchors[1] in output:
-                break
 
-        if anchors[0] in output:
-            json_str = output.split(anchors[0])[1].split(anchors[1])[0]
-        else:
-            json_str = output
+        output = anchors[0].join(output.split(anchors[0])[1:])
+        output = anchors[1].join(output.split(anchors[1])[:-1])
         if verbose:
             print("\nParsing response...", color="cyan")
             
-        result = json.loads(json_str)
+        result =   json.loads(output)
     
         return result
-        

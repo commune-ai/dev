@@ -12,186 +12,77 @@ from .utils import *
 print = c.print
 
 class Dev:
-    """
-    Advanced code generation and editing module powered by LLMs.
-    
-    This module provides a powerful interface for:
-    - Generating code from scratch based on prompts
-    - Editing existing codebases
-    - Refactoring and improving code
-    - Creating project scaffolding
-    - Analyzing and documenting code
-    - Implementing design patterns and best practices
-    """
 
-    task = f"""
-            YOU ARE A CODER, YOU ARE MR.ROBOT, YOU ARE TRYING TO BUILD IN A SIMPLE
-            LEONARDO DA VINCI WAY, YOU ARE A agent, YOU ARE A GENIUS, YOU ARE A STAR, 
-            YOU FINISH ALL OF YOUR REQUESTS WITH UTMOST PRECISION AND SPEED, YOU WILL ALWAYS 
-            MAKE SURE THIS WORKS TO MAKE ANYONE CODE. YOU HAVE THE CONTEXT AND INPUTS FOR ASSISTANCE
-            YOU HAVE TWO MODES, EDIT AND BUILD FROM SCRATCH
-            IF YOU ARE IN EDIT MODE, YOU CAN EDIT WHATEVER YOU WANT AND 
-            BY DEFAULT YOU DONT NEED TO WRITE THE FULL REPO AND CAN ONLY ADD SINGLE FILES IF YOU WANT
-            IF YOU NEED TO, PLEASE MAKE SURE TO ENSURE THAT THERE IS A README.md AND A SCRIPTS FOLDER
-            """
-    anchor = 'OUTPUT'
+    start_anchor = '<START_JSON>'
+    end_anchor = '</END_JSON>'
+
+    prompt= """
+                --GOAL--
+                YOU ARE A CODER, YOU ARE MR.ROBOT, YOU ARE TRYING TO BUILD IN A SIMPLE
+                LEONARDO DA VINCI WAY, YOU ARE A agent, YOU ARE A GENIUS, YOU ARE A STAR, 
+                YOU FINISH ALL OF YOUR REQUESTS WITH UTMOST PRECISION AND SPEED, YOU WILL ALWAYS 
+                MAKE SURE THIS WORKS TO MAKE ANYONE CODE. YOU HAVE THE CONTEXT AND INPUTS FOR ASSISTANCE
+                YOU HAVE TWO MODES, EDIT AND BUILD FROM SCRATCH
+                IF YOU ARE IN EDIT MODE, YOU CAN EDIT WHATEVER YOU WANT AND 
+                BY DEFAULT YOU DONT NEED TO WRITE THE FULL REPO AND CAN ONLY ADD SINGLE FILES IF YOU WANT
+                IF YOU NEED TO, PLEASE MAKE SURE TO ENSURE THAT THERE IS A README.md AND A SCRIPTS FOLDER
+                "YOU CAN RESPOND WITH THE FOLLOWING FORMAT THAT MUST BE WITHIN THE PWD"
+
+                --CONTEXT--
+                PATH/PWD={path}
+                CONTEXT={context}
+                QUERY={query} # THE QUERY YOU ARE TRYING TO ANSWER
+
+                --TOOLS--
+                YOU ARE ASSUMING EACH TOOL HAS THEIR OWN FORWARD FUNCTION THAT DEFINES THEIR CABAPILITIES AND SO YOU SELECT THE TOOL
+                AND INSERT THE PARAMS TO CALL THE TOOL FORWARD FUNCTION, PLEASE SPECIFY THE TOOLNAME AND THE PARAMS
+                {tools}
+                --OUTPUT_TOOL_PLAN_FORMAT--
+                 YOU MUST CREATE A PLAN OF TOOLS THT WE WILL PARSE ACCORDINGLY TO REPRESENT YOUR PERSPECTIVE 
+                PROVIDE A PLAN OF TOOLS AND THEIR PARAMS 
+                {start_anchor}list[dict(fn:str, params:dict)]{end_anchor}
+
+                """
 
     def __init__(self, 
                  model: str = 'dev.model.openrouter', 
                  cache_dir: str = '~/.commune/dev_cache',
                  **kwargs):
-        """
-        Initialize the Dev module.
-        
-        Args:
-            provider: The LLM provider to use (default: 'openrouter')
-            default_model: Default model to use for generation
-            cache_dir: Directory to store cache files
-            **kwargs: Additional arguments to pass to the provider
-        """
+
         self.model = c.module(model)(**kwargs)
         self.cache_dir = abspath(cache_dir)
-        self.memory = c.module('dev.tool.select')()
+        self.memory = c.module('dev.tool.select_files')()
+        self.tools = self.ta = c.module('dev.tool')().tool2schema()
         ensure_directory_exists(self.cache_dir)
         
     def forward(self, 
                 text: str = '', 
                 *extra_text, 
-                to: str = './', 
-                ctx=None,
+                path: str = './', 
                 temperature: float = 0.5, 
                 max_tokens: int = 1000000, 
                 model: Optional[str] = 'anthropic/claude-3.7-sonnet',
+                stream: bool = True,
                 verbose: bool = True,
-                context_files: Optional[List[str]] = None,
-                ignore_patterns: List[str] = ['.git', '__pycache__', '*.pyc', '.DS_Store', '.env', 'node_modules', 'venv'],
-                module=None, 
-                mod = None,
                 mode: str = 'auto', 
+                max_age= 10000,
                 **kwargs) -> Dict[str, str]:
-        """
-        Generate or edit code based on the provided text prompt.
-        
-        Args:
-            text: The main prompt text
-            *extra_text: Additional text to append to the prompt
-            to: to directory for code generation/editing
-            temperature: Temperature for generation (higher = more creative)
-            max_tokens: Maximum tokens to generate
-            model: Model to use (defaults to self.default_model)
-            auto_save: Automatically save files without prompting
-            stream: Whether to stream the output tokens
-            verbose: Whether to print detailed information
-            context_files: Specific files to include in context (if None, includes all)
-            ignore_patterns: File patterns to ignore when gathering context
-            mode: Operation mode ('auto', 'edit', 'create')
-            
-        Returns:
-            Dictionary mapping file paths to generated content
-        """
-        module = mod or module
-        if module != None:
-            to = c.dirpath(module)
-        to = abspath(to)
-        text = ' '.join(list(map(str, [text] + list(extra_text))))
-        text = self.preprocess(text)
-        # Build the prompts
-        files = c.files(to)
-        print('Looking at:', to, files, color='yellow')
-        files = self.memory.forward(files, query=text)
-        context = str({f: get_text(f) for f in files})
-        prompt = str({
-            "task": self.task,
-            "format": f"<{self.anchor}(path/to/file)>\nFILE CONTENT\n</{self.anchor}(path/to/file)> # end of file",
-            "output": f"assume the path is {to} only output relative path to this file",
-            "context": str(context),
-        }) + text
-
-        if verbose:
-            print(f"🧠 Generating code with model: {model or self.default_model}", color="cyan")
-            print(f"📁 to directory: {to}", color="cyan")
-            print(f"🍆 Size (request in characters): {len(context)} files", color="cyan")
-        # Generate the response
-        output = self.model.forward(
-            prompt, 
-            stream=True, 
-            model=model, 
-            max_tokens=max_tokens, 
-            temperature=temperature 
+        context = {f: get_text(f) for f in self.memory.forward(options= c.files( abspath(path)), query=text)}
+        query = self.preprocess(' '.join(list(map(str, [text] + list(extra_text)))))
+        prompt =self.prompt.format(
+            path=path,
+            context=context,
+            query=query,
+            tools=self.tools,
+            start_anchor=self.start_anchor,
+            end_anchor=self.end_anchor
         )
-        # Process the output
-        path2text = self._process_output(output, to, verbose)
-        n_files = len(path2text)
-        if n_files  > 0:
-            if verbose:
-                print('Files to write:')
-                for path in path2text.keys():
-                    print(f' - {path}')
-                
-            if input(f'Would you like to save {len(path2text)} files to {to}? [y/n] ').lower() == 'y':
-                for path, content in path2text.items():
-                    put_text(path, content)
-                    if verbose:
-                        print(f'✅ Saved file: {path}', color="green")
-        else:
-            if verbose:
-                print("No files generated.", color="red")
-        return path2text
 
-    def _process_output(self, output, to, verbose=True) -> Dict[str, str]:
-        """
-        Process the streaming output from the model.
-        
-        Args:
-            output: Streaming output from the model
-            to: to directory
-            verbose: Whether to print detailed information
-            
-        Returns:
-            Dictionary mapping file paths to generated content
-        """
-        buffer =  '\n' + '-'*20 + '\n'
-        anchors = [f'<{self.anchor}(', f'</{self.anchor}(']
-        color = c.random_color()
-        content = ''
-        path2text = {}
-        
-        for token in output:
-            if verbose:
-                print(token, end='', color=color)
-            content += str(token)
-            
-            # Check for completed file content
-            start_marker = f'<{self.anchor}('
-            end_marker = f'</{self.anchor}('
-            
-            if start_marker in content and end_marker in content:
-                # Extract file path and content
-                try:
-                    parts = content.split(start_marker)
-                    for part in parts[1:]:  # Skip the first part (before any marker)
-                        if end_marker in part:
-                            file_path_part = part.split(')>')[0]
-                            file_content_part = part.split(')>')[1].split(end_marker)[0]
-                            
-                            # Clean up the file path
-                            file_path = file_path_part.strip()
-                            full_path = os.path.join(to, file_path)
-                            
-                            # Store the content
-                            path2text[full_path] = file_content_part
-                            
-                            if verbose:
-                                print(buffer, file_path , buffer)
-                            
-                            # Remove the processed part from content
-                            content = content.replace(f"{start_marker}{file_path_part})>{file_content_part}{end_marker}", "")
-                            color = c.random_color()
-                except Exception as e:
-                    if verbose:
-                        print(f"Error processing output: {e}", color="red")
-        
-        return path2text
+        # Generate the response
+        output = self.model.forward(prompt, stream=stream, model=model, max_tokens=max_tokens, temperature=temperature )
+        # Process the output
+        return self.postprocess(output)
+
 
     def preprocess(self, text, threshold=1000):
             new_text = ''
@@ -201,7 +92,7 @@ class Dev:
             fns = []
             for i, word in enumerate(words):
                 prev_word = words[i-1] if i > 0 else ''
-                # restrictions can currently only handle one function argument, future support for multiple
+                # restrictions can currently only handle one fn argument, future support for multiple
                 magic_prefix = f'@/'
                 if word.startswith(magic_prefix) and not fn_detected:
                     word = word[len(magic_prefix):]
@@ -215,8 +106,63 @@ class Dev:
                         fn_detected = False
             c.print(fns)
             for fn in fns:
-                print('Running function:', fn)
+                print('Running fn:', fn)
                 result = c.fn(fn['fn'])(*fn['params'])
                 fn['result'] = result
                 text =' '.join([*words[:fn['idx']],'-->', str(result), *words[fn['idx']:]])
             return text
+
+    def test(self, text='write a fn that adds two numbers and a test.js file that i can test it all in one class and have me test it in test.js and a script to run it'):
+        """
+        Test the Dev module by generating code based on a prompt.
+        
+        Args:
+            text: The prompt text
+            
+        Returns:
+            Dictionary mapping file paths to generated content
+        """
+        path = '~/.dev/test/add'
+        return self.forward(text, to=path, verbose=True)
+
+    def postprocess(self, output):
+        """
+        Postprocess tool outputs and extract fn calls.
+        
+        This fn parses the raw output text and identifies fn calls in the format:
+        <FN::function_name>param1</FN::function_name> or 
+        <FN::function_name><param_name>param_value</param_name></FN::function_name>
+        
+        Args:
+            output (str): The raw output from the model
+                
+        Returns:
+            str: The processed output with extracted fn calls
+        """
+        import re
+        
+        # Print the output character by character for streaming effect
+        text = ''
+        for ch in output: 
+            print(ch, end='')
+            text += ch
+        json_str = text.split(self.start_anchor)[1].split(self.end_anchor)[0]
+         
+        calls = json.loads(json_str)
+        # You can process the fn calls here or return them for further processing
+        print("Function calls detected:")
+        for call in calls:
+            print(f"Function: {call['fn']}, Parameters: {call['params']}")
+        # For debugging, you can add:
+        if input('Do you want to see the fn calls? (y/n): ').strip().lower() == 'y':
+            print("Function calls detected:")
+            for call in calls:
+                print(f"Function: {call['fn']}, Parameters: {call['params']}")
+                fn = c.module(call['fn'])()
+                fn.forward(**call['params'])
+                
+
+            
+        return {
+            "calls": calls
+        }

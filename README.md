@@ -1,43 +1,90 @@
+# Development Environment
 
-# Key Management Module
+This repository contains a comprehensive development environment with support for multiple technologies including Docker, Node.js, Python, and Rust.
 
-This module provides cryptographic key management functionality for various blockchain systems.
+## Overview
 
-## Features
+This environment is designed to provide a unified development experience across multiple technologies. It includes:
 
-- Support for multiple cryptographic types (sr25519, ed25519, ecdsa)
-- Key generation, storage, and retrieval
-- Signing and verification of messages
-- JWT token generation and verification
-- Mnemonic phrase support
-- Secure key storage
+- Docker-based containerization
+- Next.js application framework
+- Python development tools
+- Tailwind CSS for styling
 
-## Usage
+## Project Structure
 
-```python
-from val.key import Key
+- `/app` - Next.js application
+- `/scripts` - Utility scripts for environment management
+- `Dockerfile` - Multi-purpose container with NPM, Rust, Python, and Docker
+- `docker-compose.yml` - Container orchestration configuration
 
-# Create a new key
-key = Key()
+## Getting Started
 
-# Sign a message
-signature = key.sign("Hello, world!")
+### Prerequisites
 
-# Verify a signature
-is_valid = key.verify("Hello, world!", signature, key.public_key)
+- Docker and Docker Compose
+- Node.js (for local development)
+- Python 3.9+ (for Python development)
 
-# Generate a JWT token
-token = key.get_token({"user_id": 123})
+### Setup
 
-# Verify a JWT token
-token_data = key.verify_token(token)
+1. Clone the repository
+2. Make scripts executable:
+   ```bash
+   make chmod
+   ```
+3. Start the environment:
+   ```bash
+   make start
+   ```
+
+### Available Commands
+
+```bash
+# Build the environment
+make build
+
+# Start the environment
+make start
+
+# Stop the environment
+make stop
+
+# Enter the container shell
+make enter
+
+# Run tests
+make test
 ```
 
-## Utils
+## Application Development
 
-The module includes a utility library for common cryptographic operations:
+### Next.js Application
 
-- BIP39 mnemonic handling
-- ECDSA key operations
-- String/bytes conversion utilities
-- File system operations for key storage
+The `/app` directory contains a Next.js application with Tailwind CSS integration.
+
+To run the application:
+
+```bash
+cd app
+npm install
+npm run dev
+```
+
+### Docker Environment
+
+The Docker environment provides a unified container with multiple development tools:
+
+- Python 3.x with pip and venv
+- Docker-in-Docker capability
+- Network host mode for easy service access
+
+## Configuration
+
+- `tailwind.config.js` - Tailwind CSS configuration
+- `pyproject.toml` - Python project configuration
+- `package.json` - Node.js dependencies
+
+## License
+
+MIT License
