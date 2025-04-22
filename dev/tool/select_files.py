@@ -25,8 +25,8 @@ class Select:
         self.model = c.module(provider)()
 
     def forward(self,  
-              options: Union[List[str], Dict[Any, str]] = [],  
               query: str = 'most relevant', 
+              options: Union[List[str], Dict[Any, str]] = {},  
               n: int = 10,  
               trials: int = 3,
               min_score: int = 0,
@@ -57,6 +57,7 @@ class Select:
         Returns:
             List of the most relevant options
         """
+        
 
         anchors = ["<START_JSON>", "</END_JSON>"]
         
@@ -73,14 +74,13 @@ class Select:
         context_str = f"\nCONTEXT:\n{context}" if context else ""
         
         # Build the prompt
+
         prompt = f'''
         --QUERY--
         {query}
         {context_str}
-        
         --OPTIONS--
         {idx2options} 
-        
         --RULES--
         - Evaluate each option based on its relevance to the query
         - Return at most {n} options with their scores
@@ -88,11 +88,8 @@ class Select:
         - Only include options with scores >= {threshold}
         - Be conservative with scoring to prioritize quality over quantity
         - Respond ONLY with the JSON format specified below
-        
         --OUTPUT_FORMAT--
         {anchors[0]}(data:(idx:INT, score:INT)]){anchors[1]}
-        
-        --OUTPUT--
         '''
         
         # Generate the response
