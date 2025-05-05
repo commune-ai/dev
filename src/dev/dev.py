@@ -51,7 +51,7 @@ class Dev:
 
         self.model = c.module(model)()
         self.cache_dir = abspath(cache_dir)
-        self.memory = c.module('dev.tool.select_files')()
+        self.select_files = c.module('dev.tool.select_files')()
         self.tools = self.ta = c.module('dev.tool')().tool2schema()
         ensure_directory_exists(self.cache_dir)
         
@@ -68,7 +68,7 @@ class Dev:
                 max_age= 10000,
                 **kwargs) -> Dict[str, str]:
         query = self.preprocess(' '.join(list(map(str, [text] + list(extra_text)))))
-        context = {f: get_text(f) for f in self.memory.forward(options= c.files( abspath(path)), query=query)}
+        context = {f: get_text(f) for f in self.select_files.forward(path=path, query=query)}
 
         prompt =self.prompt.format(
             path=path,

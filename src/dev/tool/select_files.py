@@ -5,7 +5,7 @@ import os
 from typing import List, Dict, Union, Optional, Any
 
 print = c.print
-class Select:
+class SelectFiles:
     """
     Advanced search and relevance ranking module powered by LLMs.
     
@@ -26,7 +26,7 @@ class Select:
 
     def forward(self,  
               query: str = 'most relevant', 
-              options: Union[List[str], Dict[Any, str]] = {},  
+              path: Union[List[str], Dict[Any, str]] = './',  
               n: int = 10,  
               trials: int = 3,
               min_score: int = 0,
@@ -60,16 +60,12 @@ class Select:
         
 
         anchors = ["<START_JSON>", "</END_JSON>"]
-        
-        # Convert dict to list if needed
-        if isinstance(options, dict):
-            idx2options = {i: {'name': k, 'data': options[k]} for i, k in enumerate(options.keys())}
-        else:
-            idx2options = {i: option for i, option in enumerate(options)}
-            
+        options = self.files(path)
+        home_path = os.path.expanduser("~")
+        idx2options = {i: option.replace(home_path, '~') for i, option in enumerate(options)}
         if not idx2options:
             return []
-            
+           
         # Format context if provided
         context_str = f"\nCONTEXT:\n{context}" if context else ""
         
@@ -132,17 +128,14 @@ class Select:
                 if isinstance(item, dict) and "idx" in item and "score" in item:
                     idx, score = item["idx"], item["score"]
                     if score >= threshold and idx in idx2options:
-                        filtered_options.append((idx, idx2options[idx]))
-                        
+                        filtered_options.append((idx, idx2options[idx]))         
             if verbose:
                 print(f"Found {filtered_options} relevant options", color="green")
-            
             # Allow user to select files by index if requested
             if allow_selection and filtered_options:
                 selected_options = self.select_by_index(filtered_options, verbose)
                 return [option[1] for option in selected_options]
-            
-            return [option[1] for option in filtered_options]
+            return [os.path.expanduser(option[1]) for option in filtered_options]
             
         except json.JSONDecodeError as e:
             if verbose:
@@ -202,3 +195,6 @@ class Select:
                 print(f"\nError during selection: {e}", color="red")
                 print("Defaulting to all files", color="yellow")
             return options
+
+    def files(self, path: str) -> List[str]:
+        return c.files(path)
