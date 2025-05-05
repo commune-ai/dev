@@ -1,90 +1,51 @@
-# Development Environment
+# Web Scraper Tool
 
-This repository contains a comprehensive development environment with support for multiple technologies including Docker, Node.js, Python, and Rust.
+A web scraping tool that retrieves search results without relying on search engine APIs.
 
-## Overview
+## Features
 
-This environment is designed to provide a unified development experience across multiple technologies. It includes:
+- Scrapes search results from Google, Bing, and DuckDuckGo
+- Supports both Selenium (for JavaScript-heavy sites) and requests+BeautifulSoup
+- Caches results to minimize redundant requests
+- Extracts titles, links, and snippets from search results
+- Provides summarization capability using LLMs
 
-- Docker-based containerization
-- Next.js application framework
-- Python development tools
-- Tailwind CSS for styling
+## Requirements
 
-## Project Structure
-
-- `/app` - Next.js application
-- `/scripts` - Utility scripts for environment management
-- `Dockerfile` - Multi-purpose container with NPM, Rust, Python, and Docker
-- `docker-compose.yml` - Container orchestration configuration
-
-## Getting Started
-
-### Prerequisites
-
-- Docker and Docker Compose
-- Node.js (for local development)
-- Python 3.9+ (for Python development)
-
-### Setup
-
-1. Clone the repository
-2. Make scripts executable:
-   ```bash
-   make chmod
-   ```
-3. Start the environment:
-   ```bash
-   make start
-   ```
-
-### Available Commands
-
-```bash
-# Build the environment
-make build
-
-# Start the environment
-make start
-
-# Stop the environment
-make stop
-
-# Enter the container shell
-make enter
-
-# Run tests
-make test
+```
+beautifulsoup4>=4.9.3
+selenium>=4.0.0
+webdriver-manager>=3.5.2
+requests>=2.25.1
 ```
 
-## Application Development
+## Usage
 
-### Next.js Application
+```python
+from web_scraper import WebScraper
 
-The `/app` directory contains a Next.js application with Tailwind CSS integration.
+# Initialize with default settings (Google search, using Selenium)
+scraper = WebScraper()
 
-To run the application:
+# Search for information
+results = scraper.forward("latest AI developments", num_results=5)
 
-```bash
-cd app
-npm install
-npm run dev
+# Print the formatted context
+print(results["context"])
+
+# Search and summarize results
+summary_result = scraper.search_and_summarize(
+    query="benefits of meditation",
+    num_results=5,
+    max_tokens=300
+)
+print(summary_result["summary"])
 ```
 
-### Docker Environment
+## Configuration Options
 
-The Docker environment provides a unified container with multiple development tools:
-
-- Python 3.x with pip and venv
-- Docker-in-Docker capability
-- Network host mode for easy service access
-
-## Configuration
-
-- `tailwind.config.js` - Tailwind CSS configuration
-- `pyproject.toml` - Python project configuration
-- `package.json` - Node.js dependencies
-
-## License
-
-MIT License
+- `search_engine`: Choose between 'google', 'bing', or 'duckduckgo'
+- `use_selenium`: Whether to use Selenium for JavaScript-heavy sites
+- `headless`: Whether to run browser in headless mode (Selenium only)
+- `cache_dir`: Directory to store cached results
+- `cache_expiry`: Time in seconds before cache entries expire

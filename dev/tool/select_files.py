@@ -135,7 +135,7 @@ class Select:
                         filtered_options.append((idx, idx2options[idx]))
                         
             if verbose:
-                print(f"Found {len(filtered_options)} relevant options", color="green")
+                print(f"Found {filtered_options} relevant options", color="green")
             
             # Allow user to select files by index if requested
             if allow_selection and filtered_options:

@@ -49,7 +49,7 @@ class Dev:
                  cache_dir: str = '~/.commune/dev_cache',
                  **kwargs):
 
-        self.model = c.module(model)(**kwargs)
+        self.model = c.module(model)()
         self.cache_dir = abspath(cache_dir)
         self.memory = c.module('dev.tool.select_files')()
         self.tools = self.ta = c.module('dev.tool')().tool2schema()
@@ -67,8 +67,9 @@ class Dev:
                 mode: str = 'auto', 
                 max_age= 10000,
                 **kwargs) -> Dict[str, str]:
-        context = {f: get_text(f) for f in self.memory.forward(options= c.files( abspath(path)), query=text)}
         query = self.preprocess(' '.join(list(map(str, [text] + list(extra_text)))))
+        context = {f: get_text(f) for f in self.memory.forward(options= c.files( abspath(path)), query=query)}
+
         prompt =self.prompt.format(
             path=path,
             context=context,
@@ -148,21 +149,18 @@ class Dev:
             text += ch
         json_str = text.split(self.start_anchor)[1].split(self.end_anchor)[0]
          
-        calls = json.loads(json_str)
+        plan = json.loads(json_str)
         # You can process the fn calls here or return them for further processing
         print("Function calls detected:")
-        for call in calls:
-            print(f"Function: {call['fn']}, Parameters: {call['params']}")
+        print(plan)
         # For debugging, you can add:
         if input('Do you want to see the fn calls? (y/n): ').strip().lower() == 'y':
             print("Function calls detected:")
-            for call in calls:
+            for call in plan:
                 print(f"Function: {call['fn']}, Parameters: {call['params']}")
                 fn = c.module(call['fn'])()
                 fn.forward(**call['params'])
                 
-
-            
         return {
-            "calls": calls
+            "plan": plan
         }

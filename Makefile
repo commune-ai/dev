@@ -15,4 +15,8 @@ up:
 	make start
 down:
 	make stop
+frontend:
+	${SCRIPTS_PATH}/frontend.sh
+wa:
+	make frontend
 

@@ -4,7 +4,7 @@ import os
 import re
 from typing import Dict, List, Union, Optional, Any
 from ..utils import get_text, put_text, abspath
-
+print = c.print
 class Insert:
     """
     A utility tool for inserting text between specified anchor points in files.
